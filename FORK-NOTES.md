@@ -25,7 +25,7 @@
 - 默认自动宽度 `165pt`，最小 `150pt`，最大 `560pt`。
 - 保留已编译的 macOS arm64 `TrafficLightOverlay` 二进制。
 - 插件市场展示元数据：
-  - 中文名称：`任务状态灯`
+  - 中文名称：`任务状态灯 (dsh-trafficlight)`
   - 中文简介：见 `locale/zh.json` 的 `meta.description`
   - 图标：包根 `icon.svg`（红黄绿三色交通灯）
 
