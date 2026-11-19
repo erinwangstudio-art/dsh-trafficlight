@@ -6,6 +6,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
+import type { PresentationMode } from '../core/types.ts'
 
 /** Default overlay opacity. Full value matches the current look; lower = more transparent. */
 export const DEFAULT_OPACITY = 1
@@ -22,6 +23,15 @@ export const BREATH_COUNT_MAX = 6
 export const DEFAULT_BREATH_BEAT = 0.35
 export const BREATH_BEAT_MIN = 0.1
 export const BREATH_BEAT_MAX = 1.0
+
+/** Where the traffic light lives: the floating macOS panel or the DSH sidebar. */
+export const DEFAULT_MODE: PresentationMode = 'floating'
+export const MODES: PresentationMode[] = ['floating', 'docked']
+
+/** Clamp a raw mode to the supported set. */
+export function clampMode(value: unknown, fallback: PresentationMode = DEFAULT_MODE): PresentationMode {
+  return value === 'docked' || value === 'floating' ? value : fallback
+}
 
 /** Resolve the persistence file. Override with DSH_TL_SETTINGS_FILE; otherwise
  *  the dsh storage convention `~/.dsh/storages/<name>.json`. */
@@ -55,6 +65,7 @@ export class SettingsStore {
   private minimalValue = false
   private breathCountValue: number = DEFAULT_BREATH_COUNT
   private breathBeatValue: number = DEFAULT_BREATH_BEAT
+  private modeValue: PresentationMode = DEFAULT_MODE
   private readonly file: string
   private readonly ctx: Context
   private saveTimer: ReturnType<typeof setTimeout> | undefined
@@ -82,6 +93,18 @@ export class SettingsStore {
   /** Breathing beat width in seconds (0.1..1). */
   breathBeat(): number {
     return this.breathBeatValue
+  }
+
+  /** Presentation mode: 'floating' (macOS panel) or 'docked' (in-page sidebar). */
+  mode(): PresentationMode {
+    return this.modeValue
+  }
+
+  /** Set the presentation mode and persist. Returns the accepted value. */
+  setMode(value: unknown): PresentationMode {
+    this.modeValue = clampMode(value)
+    this.scheduleSave()
+    return this.modeValue
   }
 
   /** Set opacity and persist. Returns the clamped, accepted value. */
@@ -122,6 +145,7 @@ export class SettingsStore {
         if (obj.minimalMode !== undefined) this.minimalValue = obj.minimalMode === true
         if (obj.breathCount !== undefined) this.breathCountValue = clampBreathCount(obj.breathCount)
         if (obj.breathBeat !== undefined) this.breathBeatValue = clampBreathBeat(obj.breathBeat)
+        if (obj.mode !== undefined) this.modeValue = clampMode(obj.mode)
       }
     } catch {
       // First run / corrupt file → defaults.
@@ -145,6 +169,7 @@ export class SettingsStore {
           minimalMode: this.minimalValue,
           breathCount: this.breathCountValue,
           breathBeat: this.breathBeatValue,
+          mode: this.modeValue,
         }, null, 2), 'utf8')
       fs.renameSync(tmp, this.file)
     } catch (error) {

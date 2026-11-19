@@ -208,8 +208,19 @@ function SubscribeAction(_props: Record<string, unknown>): React.JSX.Element {
 
   React.useEffect(() => {
     let alive = true
-    void refresh().then(() => { if (alive) setState((s) => ({ ...s, subscribed: subscribedIds.has(sessionId) })) })
-    return () => { alive = false }
+    // Poll: the subscription can also change from the floating overlay's row
+    // buttons or the docked sidebar panel, so refresh the chip periodically.
+    const sync = (): void => {
+      void refresh().then(() => {
+        if (alive) setState((s) => ({ ...s, subscribed: subscribedIds.has(sessionId) }))
+      })
+    }
+    sync()
+    const timer = setInterval(sync, 2000)
+    return () => {
+      alive = false
+      clearInterval(timer)
+    }
   }, [sessionId])
 
   const onClick = async (): Promise<void> => {
@@ -414,6 +425,134 @@ function TrafficLightSection({ t }: { t?: (key: string) => string }): React.JSX.
 // ── Plugin entry ───────────────────────────────────────────────────────
 
 /** The entry apply(). */
+
+// ── Docked sidebar panel ───────────────────────────────────────────────
+interface DockRow { sessionId: string; title: string; state: string }
+interface DockSnapshot { mode?: string; sessions?: DockRow[] }
+
+const DOCK_COLORS: Record<string, string> = {
+  blocked: '#ff453a', running: '#ffd60a', done: '#30d158', idle: '#8e8e93',
+}
+const DOCK_LABELS: Record<string, string> = {
+  blocked: '等待处理', running: '执行中', done: '已完成', idle: '空闲',
+}
+const DOCK_POLL_MS = 1000
+
+function postDock(path: string, body?: unknown): void {
+  void fetch(path, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body ?? {}),
+  }).catch(() => {})
+}
+
+/**
+ * In-page twin of the macOS floating panel, mounted in the official
+ * `sidebar.footer.action` slot. While the floating panel is active it renders
+ * a persistent dashed drop target instead, so the workspace list ends above
+ * the dock area and nothing overlaps.
+ */
+function DockedPanel(): React.JSX.Element | null {
+  const [snapshot, setSnapshot] = React.useState<DockSnapshot | null>(null)
+
+  React.useEffect(() => {
+    let alive = true
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const tick = (): void => {
+      fetch('/api/dsh-tl/state', { cache: 'no-store' })
+        .then((res) => (res.ok ? res.json() as Promise<{ ok?: boolean; value?: DockSnapshot }> : null))
+        .then((body) => {
+          if (!alive) return
+          setSnapshot(body?.ok ? body.value ?? null : null)
+          if (body?.ok && body.value?.mode === 'docked') {
+            // Prove the sidebar twin is alive; the host reverts to the floating
+            // panel if this heartbeat never arrives.
+            void fetch('/api/dsh-tl/dockbeat', { method: 'POST' }).catch(() => {})
+          }
+        })
+        .catch(() => {})
+      if (alive) timer = setTimeout(tick, DOCK_POLL_MS)
+    }
+    tick()
+    return () => {
+      alive = false
+      if (timer !== undefined) clearTimeout(timer)
+    }
+  }, [])
+
+  if (snapshot === null) return null
+
+  if (snapshot.mode !== 'docked') {
+    return (
+      <div style={{
+        width: '100%', boxSizing: 'border-box', margin: '2px 4px 6px', padding: '0 8px', height: 64,
+        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+        border: '1.5px dashed var(--dsw-alias-border-default, rgba(200,200,200,0.32))',
+        borderRadius: 10, fontSize: 11,
+        color: 'var(--dsw-alias-label-tertiary, rgba(255,255,255,0.5))',
+        userSelect: 'none',
+      }}>
+        🚦 拖到这里固定
+      </div>
+    )
+  }
+
+  const rows = Array.isArray(snapshot.sessions) ? snapshot.sessions : []
+  const focusRow = (sessionId: string): void => postDock('/api/dsh-tl/focus', { sessionId })
+  const unsubscribeRow = (sessionId: string): void => {
+    void fetch('/api/dsh-tl/subscriptions?sessionId=' + encodeURIComponent(sessionId), { method: 'DELETE' }).catch(() => {})
+  }
+  const undock = (): void => postDock('/api/dsh-tl/mode', { mode: 'floating' })
+
+  return (
+    <div style={{
+      width: '100%', boxSizing: 'border-box', padding: '0 4px 6px', marginTop: 4,
+      borderTop: '1px solid var(--dsw-alias-border-subtle, rgba(128,128,128,0.18))',
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 2px 4px' }}>
+        <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--dsw-alias-label-primary, #e6e6e6)' }}>🚦 任务状态</span>
+        <span style={{ flex: 1 }} />
+        <button onClick={undock} title="把红绿灯放回 macOS 悬浮窗" style={{
+          fontSize: 11, padding: '2px 8px', borderRadius: 6,
+          border: '1px solid var(--dsw-alias-border-default, rgba(128,128,128,0.35))',
+          background: 'transparent', color: 'var(--dsw-alias-label-secondary, rgba(255,255,255,0.7))', cursor: 'pointer',
+        }}>悬浮窗</button>
+      </div>
+      {rows.length === 0 ? (
+        <div style={{ fontSize: 11, color: 'var(--dsw-alias-label-tertiary, rgba(255,255,255,0.5))', padding: '2px 2px 6px' }}>
+          在会话标题栏点击 🚦 订阅，这里会显示任务状态
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 2, maxHeight: '30vh', overflowY: 'auto' }}>
+          {rows.map((row) => {
+            const color = DOCK_COLORS[row.state] ?? DOCK_COLORS.idle
+            return (
+              <div key={row.sessionId} onClick={() => focusRow(row.sessionId)} title="跳转到该会话"
+                style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 6px', borderRadius: 6, cursor: 'pointer' }}
+                onMouseEnter={(event) => { event.currentTarget.style.background = 'rgba(127,127,127,0.14)' }}
+                onMouseLeave={(event) => { event.currentTarget.style.background = 'transparent' }}>
+                <span style={{
+                  width: 8, height: 8, borderRadius: '50%', background: color, flex: 'none',
+                  boxShadow: row.state === 'running' ? `0 0 6px ${color}` : 'none',
+                }} />
+                <span style={{
+                  fontSize: 12, color: 'var(--dsw-alias-label-primary, #e6e6e6)', flex: 1,
+                  overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                }}>{row.title || row.sessionId}</span>
+                <span style={{ fontSize: 10, color, flex: 'none' }}>{DOCK_LABELS[row.state] ?? DOCK_LABELS.idle}</span>
+                <button onClick={(event) => { event.stopPropagation(); unsubscribeRow(row.sessionId) }} title="取消订阅" style={{
+                  border: 'none', background: 'transparent', cursor: 'pointer',
+                  color: 'var(--dsw-alias-label-tertiary, rgba(255,255,255,0.4))', fontSize: 12, lineHeight: 1, padding: '0 2px',
+                }}>✕</button>
+              </div>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export function apply(ctx: { effect(fn: () => () => void, name: string): void }): void {
   ctx.effect(() => {
     const disposers: Array<() => void> = []
@@ -479,6 +618,9 @@ export function apply(ctx: { effect(fn: () => () => void, name: string): void })
 
       // Per-session「🚦 订阅」toggle in the conversation header.
       register('conversation.session.header.actions', 'subscribe', 1000, SubscribeAction as unknown as React.ComponentType<Record<string, unknown>>)
+
+      // Sidebar footer: persistent drop target / docked panel.
+      register('sidebar.footer.action', 'docked', 40, DockedPanel as unknown as React.ComponentType<Record<string, unknown>>)
 
       // 红绿灯独立设置分区 — pass `t` via inject so the section can translate.
       register('settings.section', 'trafficlight', 50, TrafficLightSection as unknown as React.ComponentType<Record<string, unknown>>, {

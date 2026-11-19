@@ -17,6 +17,10 @@ final class StatusClient: ObservableObject {
     @Published var breathCount: Int = 3
     /// Breathing beat width (one scale-sweep) in seconds; consumed by the lamps.
     @Published var breathBeat: Double = 0.35
+    /// Where the light lives: "floating" (this panel) or "docked" (DSH sidebar).
+    @Published var mode: String = "floating"
+    /// Fired on the main queue whenever the mode changes (local click or host poll).
+    var onModeChanged: ((String) -> Void)?
     /// The most-recently-changed subscribed session's light state. Drives the
     /// big lamp in minimal mode — it reflects the latest update regardless of
     /// which session produced it.
@@ -24,6 +28,12 @@ final class StatusClient: ObservableObject {
 
     private let url: URL
     private var timer: Timer?
+    /// sessionId -> monotonic change counter. The breathing lamp triggers on
+    /// this instead of the 6-second "recent" flag: two changes that happen
+    /// inside the window would otherwise never flip the boolean and the pulse
+    /// would be silently skipped.
+    @Published private(set) var stateChangeTick: [String: Int] = [:]
+
     /// sessionId -> when its state/detail last changed (used to spotlight
     /// recently-changed rows with a temporarily larger lamp).
     private var stateChangedAt: [String: Date] = [:]
@@ -39,6 +49,7 @@ final class StatusClient: ObservableObject {
     private func recordChange(_ id: String, newState: TrafficState) {
         let now = Date()
         stateChangedAt[id] = now
+        stateChangeTick[id, default: 0] += 1
         // Opportunistic prune: drop entries older than the recency window.
         if stateChangedAt.count > 32 {
             let cutoff = Date(timeIntervalSinceNow: -6)
@@ -80,8 +91,8 @@ final class StatusClient: ObservableObject {
         timer?.tolerance = 0.25
     }
 
-    /// Ask the DSH web client to open this subscribed session, then raise the
-    /// desktop window through its supported `dsh://open` protocol handler.
+    /// Ask the DSH web client to open this subscribed session, then bring the
+    /// desktop window forward — restoring it from the Dock when minimized.
     func openSession(_ sessionId: String) {
         guard !sessionId.isEmpty,
               let endpoint = URL(string: "http://127.0.0.1:\(url.port ?? 18_765)/focus") else { return }
@@ -91,10 +102,94 @@ final class StatusClient: ObservableObject {
         request.httpBody = try? JSONSerialization.data(withJSONObject: ["sessionId": sessionId])
         request.timeoutInterval = 2
         URLSession.shared.dataTask(with: request) { _, response, _ in
-            guard (response as? HTTPURLResponse)?.statusCode == 202,
-                  let desktop = URL(string: "dsh://open") else { return }
-            DispatchQueue.main.async { NSWorkspace.shared.open(desktop) }
+            guard (response as? HTTPURLResponse)?.statusCode == 202 else { return }
+            DispatchQueue.main.async { StatusClient.raiseDesktopApp() }
         }.resume()
+    }
+
+    /// Bring the DSH Desktop window to the front, restoring it when minimized.
+    ///
+    /// Upstream opened `dsh://open` here, but DSH Desktop NEXT registers no
+    /// `dsh://` URL scheme (`CFBundleURLTypes` is absent), so macOS popped
+    /// "There is no application set to open the URL dsh://open".
+    ///
+    /// Plain `NSRunningApplication.activate` is not enough either: it brings
+    /// the app forward but leaves a minimized window in the Dock. DSH restores
+    /// minimized windows from its Electron `activate` handler
+    /// (`app.on("activate", openMain)`), and `openMain()` → `show(window)`
+    /// runs `window.restore()`. LaunchServices only posts that reopen event
+    /// when the running app is asked to open again — the dock-click path —
+    /// which `NSWorkspace.openApplication` does.
+    static func raiseDesktopApp() {
+        let bundleId = "ai.deepseek.dsh.desktop.next"
+        guard let appURL = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleId) else {
+            activateRunning(bundleId)
+            return
+        }
+        let configuration = NSWorkspace.OpenConfiguration()
+        configuration.activates = true
+        configuration.createsNewApplicationInstance = false
+        NSWorkspace.shared.openApplication(at: appURL, configuration: configuration) { app, _ in
+            // LaunchServices can refuse (busy app, policy); fall back to plain
+            // activation so the row never becomes a dead click.
+            if app == nil { activateRunning(bundleId) }
+        }
+    }
+
+    /// Last-resort activation: unhide + activate, without reopen semantics.
+    private static func activateRunning(_ bundleId: String) {
+        guard let app = NSRunningApplication.runningApplications(withBundleIdentifier: bundleId).first else { return }
+        _ = app.unhide()
+        app.activate(options: [.activateAllWindows])
+    }
+
+    /// Switch the light between the floating panel and the DSH sidebar twin.
+    /// Applies locally at once (so the window hides/shows immediately) and
+    /// persists the choice through the host bridge.
+    func setMode(_ target: String) {
+        let next = target == "docked" ? "docked" : "floating"
+        guard next != mode else { return }
+        mode = next
+        onModeChanged?(next)
+        guard var comps = URLComponents(string: url.absoluteString) else { return }
+        comps.path = "/mode"
+        guard let endpoint = comps.url else { return }
+        var request = URLRequest(url: endpoint)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try? JSONSerialization.data(withJSONObject: ["mode": next])
+        request.timeoutInterval = 2
+        URLSession.shared.dataTask(with: request).resume()
+    }
+
+    /// Turn the light off for good: unsubscribe every current row (so the DSH
+    /// header chips flip back to「订阅」) and quit the overlay. The next
+    /// subscription restarts it through the plugin's auto-start.
+    func closeOverlay() {
+        let ids = sessions.map(\.sessionId)
+        guard !ids.isEmpty else {
+            NSApp.terminate(nil)
+            return
+        }
+        let group = DispatchGroup()
+        for id in ids {
+            var comps = URLComponents(string: url.absoluteString)
+            comps?.path = "/subscriptions"
+            comps?.queryItems = [URLQueryItem(name: "sessionId", value: id)]
+            guard let target = comps?.url else { continue }
+            var request = URLRequest(url: target)
+            request.httpMethod = "DELETE"
+            request.timeoutInterval = 2
+            group.enter()
+            URLSession.shared.dataTask(with: request) { _, _, _ in
+                group.leave()
+            }.resume()
+        }
+        group.notify(queue: .main) {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                NSApp.terminate(nil)
+            }
+        }
     }
 
     /// Remove a row (unsubscribe). The bridge deletes the subscription and the
@@ -140,6 +235,10 @@ final class StatusClient: ObservableObject {
                 }
                 if let beat = snap.breathBeat {
                     self.breathBeat = min(1.0, max(0.1, beat))
+                }
+                if let mode = snap.mode, (mode == "floating" || mode == "docked"), mode != self.mode {
+                    self.mode = mode
+                    self.onModeChanged?(mode)
                 }
             }
         }

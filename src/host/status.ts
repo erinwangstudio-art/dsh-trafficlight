@@ -14,7 +14,7 @@
 // user did not subscribe to never appear in the snapshot, even if active.
 import type { Context } from '@deepseek-ai/cordis'
 import type { Session } from '@deepseek-ai/dsh-session'
-import type { SessionStatus, TrafficSnapshot, TrafficState } from '../core/types.ts'
+import type { PresentationMode, SessionStatus, TrafficSnapshot, TrafficState } from '../core/types.ts'
 import type { SettingsStore } from './settings.ts'
 import type { SubscriptionStore } from './subscriptions.ts'
 import { maybeStartOverlay } from './overlay-launcher.ts'
@@ -53,6 +53,8 @@ export class StatusMachine {
   private readonly subs: SubscriptionStore
   private readonly settings: SettingsStore
   private readonly sessions = new Map<string, SessionTrack>()
+  /** Last heartbeat from the in-page docked panel (0 = never seen). */
+  private dockBeatAt = 0
   private version = 0
   private readonly listeners = new Set<() => void>()
 
@@ -146,6 +148,20 @@ export class StatusMachine {
 
     // Restore the overlay when the host restarts with persisted subscriptions.
     if (this.subs.list().length > 0) void maybeStartOverlay(this.ctx)
+
+    // Restart-time safety net: if the process came back while docked, give the
+    // in-page panel a moment to report in; otherwise restore the floating
+    // window so the light cannot stay lost behind a dead dock.
+    if (this.settings.mode() === 'docked') {
+      const resumedAt = Date.now()
+      setTimeout(() => {
+        if (this.settings.mode() !== 'docked') return
+        if (this.dockBeatAt >= resumedAt) return
+        this.warn('docked mode resumed without a client heartbeat — reverting to floating overlay')
+        this.settings.setMode('floating')
+        this.bump()
+      }, 15_000)
+    }
 
     // Prune fully-idle UNSUBSCRIBED sessions so long-running dsh web processes
     // don't leak finished session bookkeeping forever. Subscribed sessions are
@@ -253,6 +269,8 @@ export class StatusMachine {
       minimalMode: this.settings.minimalMode(),
       breathCount: this.settings.breathCount(),
       breathBeat: this.settings.breathBeat(),
+      mode: this.settings.mode(),
+      dockHealthy: Date.now() - this.dockBeatAt < 15_000,
       updatedAt: Date.now(),
     }
   }
@@ -284,6 +302,32 @@ export class StatusMachine {
     const accepted = this.settings.setBreathBeat(value)
     this.bump()
     return accepted
+  }
+
+  /**
+   * Presentation mode. When docking, a safety net reverts to the floating
+   * panel if the in-page panel never reports in (stale client bundle, slot not
+   * mounted), so the light cannot get lost behind a dead dock.
+   */
+  setMode(value: unknown): PresentationMode {
+    const accepted = this.settings.setMode(value)
+    this.bump()
+    if (accepted === 'docked') {
+      const started = Date.now()
+      setTimeout(() => {
+        if (this.settings.mode() !== 'docked') return
+        if (this.dockBeatAt >= started) return
+        this.warn('docked panel did not report in — reverting to floating overlay')
+        this.settings.setMode('floating')
+        this.bump()
+      }, 12_000)
+    }
+    return accepted
+  }
+
+  /** Heartbeat from the in-page docked panel; proves the sidebar twin renders. */
+  noteDockBeat(): void {
+    this.dockBeatAt = Date.now()
   }
 
   private fold(session: Session, event: SessionEventLike, notify = true): void {

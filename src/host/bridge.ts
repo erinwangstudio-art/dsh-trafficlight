@@ -174,6 +174,19 @@ export function startStandaloneServer(status: StatusMachine, port: number, ctx: 
       })
       return
     }
+    if (req.method === 'GET' && url.pathname === '/mode') {
+      res.writeHead(200, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' })
+      res.end(JSON.stringify({ ok: true, value: { mode: status.snapshot().mode } }))
+      return
+    }
+    if (req.method === 'POST' && url.pathname === '/mode') {
+      readJson(req).then((body) => {
+        const accepted = status.setMode(body?.mode)
+        res.writeHead(200, { 'content-type': 'application/json; charset=utf-8' })
+        res.end(JSON.stringify({ ok: true, value: { mode: accepted } }))
+      })
+      return
+    }
     if (req.method === 'GET' && url.pathname === '/breath') {
       res.writeHead(200, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' })
       const s = status.snapshot()
@@ -302,6 +315,20 @@ export function registerWebRoutes(ctx: Context, status: StatusMachine): () => vo
       res.end(JSON.stringify({ ok: true, value: { sessionId: takeFocusRequest() ?? null } }))
       return
     }
+    if (req.method === 'POST' && url.pathname === '/api/dsh-tl/focus') {
+      const body = await readJson(req)
+      const sessionId = String(body?.sessionId ?? '')
+      const accepted = sessionId !== '' && requestFocus(sessionId, status)
+      res.writeHead(accepted ? 202 : 404, { 'content-type': 'application/json; charset=utf-8' })
+      res.end(JSON.stringify({ ok: accepted }))
+      return
+    }
+    if (req.method === 'POST' && url.pathname === '/api/dsh-tl/dockbeat') {
+      status.noteDockBeat()
+      res.writeHead(200, { 'content-type': 'application/json; charset=utf-8' })
+      res.end(JSON.stringify({ ok: true }))
+      return
+    }
     if (req.method === 'POST' && url.pathname === '/api/dsh-tl/subscriptions') {
       const body = await readJson(req)
       const sessionId = String(body?.sessionId ?? '')
@@ -349,6 +376,18 @@ export function registerWebRoutes(ctx: Context, status: StatusMachine): () => vo
       const accepted = status.setMinimalMode(body?.minimalMode)
       res.writeHead(200, { 'content-type': 'application/json; charset=utf-8' })
       res.end(JSON.stringify({ ok: true, value: { minimalMode: accepted } }))
+      return
+    }
+    if (req.method === 'GET' && url.pathname === '/api/dsh-tl/mode') {
+      res.writeHead(200, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' })
+      res.end(JSON.stringify({ ok: true, value: { mode: status.snapshot().mode } }))
+      return
+    }
+    if (req.method === 'POST' && url.pathname === '/api/dsh-tl/mode') {
+      const body = await readJson(req)
+      const accepted = status.setMode(body?.mode)
+      res.writeHead(200, { 'content-type': 'application/json; charset=utf-8' })
+      res.end(JSON.stringify({ ok: true, value: { mode: accepted } }))
       return
     }
     if (req.method === 'GET' && url.pathname === '/api/dsh-tl/breath') {

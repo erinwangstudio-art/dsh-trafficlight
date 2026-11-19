@@ -1,7 +1,7 @@
 {
   "name": "@chivaskong96/dsh-trafficlight",
-  "description": "Fork of dsh-trafficlight for DSH Desktop 0.2.2-rc.3: per-session traffic-light states, a macOS floating overlay, subscribed-session navigation, real conversation titles, persisted settings, and a resizable narrow panel.",
-  "version": "0.3.1-fork.1",
+  "description": "Fork of dsh-trafficlight for DSH Desktop: per-session traffic-light states, a macOS floating overlay with native Liquid Glass, a dockable in-page sidebar twin, subscribed-session navigation, real conversation titles, persisted settings, and drawn resize affordances.",
+  "version": "0.4.0-fork.1",
   "publishConfig": {
     "access": "public"
   },

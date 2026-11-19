@@ -8,6 +8,9 @@
 /** The four logical states of a traffic light. */
 export type TrafficState = 'idle' | 'running' | 'blocked' | 'done'
 
+/** Presentation of the light: floating macOS panel or docked in the DSH sidebar. */
+export type PresentationMode = 'floating' | 'docked'
+
 /** Per-session status row shown in the overlay. */
 export interface SessionStatus {
   /** Stable dsh session id. */
@@ -50,6 +53,10 @@ export interface TrafficSnapshot {
   breathCount: number
   /** Breathing beat width in seconds (one scale-sweep). Consumed by the overlay lamps. */
   breathBeat: number
+  /** Where the light lives: the macOS floating panel, or docked inside the DSH sidebar. */
+  mode: PresentationMode
+  /** True while the in-page docked panel is reporting in (heartbeat < 15 s old). */
+  dockHealthy: boolean
   /** Epoch milliseconds when this snapshot was produced. */
   updatedAt: number
 }

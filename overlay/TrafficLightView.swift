@@ -32,7 +32,47 @@ struct TrafficSnapshot: Codable {
     let breathCount: Int?
     let breathBeat: Double?
     let detail: String?
+    let mode: String?
     let updatedAt: Int
+}
+
+/// Drawn resize affordance. macOS ignores cursor changes from non-activating
+/// panels, so the edge itself lights up with a bar and a “↔” badge on hover.
+private struct EdgeResizeHint: View {
+    let trailing: Bool
+
+    var body: some View {
+        HStack(spacing: 6) {
+            if trailing {
+                Spacer(minLength: 0)
+                pill
+                bar
+            } else {
+                bar
+                pill
+                Spacer(minLength: 0)
+            }
+        }
+        .frame(maxHeight: .infinity)
+        .allowsHitTesting(false)
+        .transition(.opacity)
+    }
+
+    private var bar: some View {
+        RoundedRectangle(cornerRadius: 1.5)
+            .fill(Color.white.opacity(0.62))
+            .frame(width: 3)
+            .padding(.vertical, 12)
+    }
+
+    private var pill: some View {
+        Text("↔")
+            .font(.system(size: 11, weight: .bold))
+            .foregroundColor(.white.opacity(0.95))
+            .frame(width: 20, height: 20)
+            .background(RoundedRectangle(cornerRadius: 6).fill(Color.black.opacity(0.5)))
+            .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.white.opacity(0.25), lineWidth: 1))
+    }
 }
 
 struct TrafficLightView: View {
@@ -59,24 +99,97 @@ struct TrafficLightView: View {
         }
     }
 
+    // ── Liquid-glass backing ─────────────────────────────────────────────
+    // The slider is a "glass density": low values leave the vibrancy almost
+    // clear (transparent glass), high values tint it into a fully frosted
+    // surface. The real blur comes from the NSVisualEffectView behind the
+    // SwiftUI layer; this tint is what the user can tune.
+    private var glassLevel: Double { min(1, max(0.1, client.opacity)) }
+    private var glassTint: Double {
+        // Liquid Glass already supplies most of the backdrop; the fallback
+        // vibrancy path needs the heavier tint to stay readable.
+        mover.usesLiquidGlass ? 0.10 + 0.42 * glassLevel : 0.12 + 0.72 * glassLevel
+    }
+    private var glassHighlight: Color { Color.white.opacity(0.04 + 0.05 * glassLevel) }
+
+    private var glassBackground: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(Color.black.opacity(glassTint))
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(LinearGradient(colors: [glassHighlight, Color.clear],
+                                     startPoint: .top,
+                                     endPoint: .center))
+        }
+    }
+
     var body: some View {
-        (client.minimalMode ? AnyView(minimalBody) : AnyView(fullBody))
+        (client.minimalMode
+            ? AnyView(minimalBody)
+            : (minimized ? AnyView(minimizedBody) : AnyView(fullBody)))
+            // Pin the content to the top edge. If the hosting view's layout is
+            // ever a frame behind the window size, the content now overflows
+            // at the bottom instead of being centred and clipped at the top.
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             .onAppear {
                 mover.setMinimal(client.minimalMode)
                 mover.fitToContent(client.sessions)
             }
-            .onChange(of: client.sessions) { _, newSessions in
+            .onChange(of: client.sessions) { newSessions in
                 mover.fitToContent(newSessions)
             }
-            .onChange(of: client.opacity) { _, newValue in
-                mover.setPanelOpacity(newValue)
+            .onReceive(client.$opacity) { value in
+                mover.setGlassLevel(value)
             }
-            .onChange(of: client.minimalMode) { _, newValue in
+            .onChange(of: client.minimalMode) { newValue in
                 mover.setMinimal(newValue)
             }
-            .onChange(of: minimized) { _, newValue in
-                mover.setMinimized(newValue)
+            .onChange(of: minimized) { newValue in
+                // Resize the window on the next runloop, outside SwiftUI's view
+                // update. Resizing synchronously here left NSHostingView laying
+                // out the new body with the previous height (58 <-> 83), which
+                // clipped the title on expand and shifted the bar on collapse.
+                DispatchQueue.main.async {
+                    mover.setMinimized(newValue)
+                }
             }
+    }
+
+    /// Collapsed layout: one compact, fixed-height bar. Its required height
+    /// matches the window's collapsed height, otherwise AppKit's constraint
+    /// layout grows the window (leaving an empty frosted area) and shifts the
+    /// top edge on every toggle.
+    private var minimizedBody: some View {
+        HStack(spacing: 8) {
+            NativeDragStrip(size: 20)
+                .frame(width: 20, height: 20)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(client.sessions.isEmpty ? "DSH 红绿灯" : statusLabel)
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundColor(.white.opacity(0.9))
+                Text(subtitle)
+                    .font(.system(size: 9.5))
+                    .foregroundColor(.white.opacity(0.55))
+                    .lineLimit(1)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            statusDot
+            dockButton
+            minimizeButton
+            closeButton
+        }
+        .padding(.horizontal, 10)
+        .frame(height: 50)
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(Color.black.opacity(0.45))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(Color.white.opacity(0.18), lineWidth: 1)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .padding(4)
     }
 
     /// Full layout: persistent title bar + subscribed-session rows.
@@ -98,10 +211,12 @@ struct TrafficLightView: View {
                 if minimized {
                     statusDot
                 }
+                dockButton
                 minimizeButton
                 closeButton
             }
-            .padding(.horizontal, 10)
+            .padding(.leading, 10)
+            .padding(.trailing, 18)
             .padding(.vertical, 6)
             .frame(maxWidth: .infinity, minHeight: 34)
 
@@ -120,21 +235,29 @@ struct TrafficLightView: View {
         }
         .padding(4)
         .frame(maxWidth: .infinity)
-        .background(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(Color.black.opacity(0.45))
-        )
+        .background(glassBackground)
         .overlay(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .stroke(Color.white.opacity(0.18), lineWidth: 1)
         )
         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .overlay(alignment: .trailing) {
+        .overlay(alignment: .leading) {
             ResizeEdgeStrip(mover: mover)
-                .frame(width: 10)
+                .frame(width: 14)
                 .frame(maxHeight: .infinity)
-                .padding(.top, 38)
-                .help("拖动调整宽度")
+                .help("拖动左边缘调整宽度")
+        }
+        .overlay(alignment: .trailing) {
+            ResizeEdgeStrip(mover: mover, trailing: true)
+                .frame(width: 14)
+                .frame(maxHeight: .infinity)
+                .help("拖动右边缘调整宽度")
+        }
+        .overlay(alignment: .leading) {
+            if mover.hoveredEdge == .leading { EdgeResizeHint(trailing: false) }
+        }
+        .overlay(alignment: .trailing) {
+            if mover.hoveredEdge == .trailing { EdgeResizeHint(trailing: true) }
         }
     }
 
@@ -151,9 +274,13 @@ struct TrafficLightView: View {
                 size: 40,
                 breath: latestBreath,
                 breaths: client.breathCount,
-                beatDuration: client.breathBeat
+                beatDuration: client.breathBeat,
+                continuous: client.latestState == .running || client.latestState == .blocked,
+                continuousPeriod: client.latestState == .blocked ? 1.0 : 2.0,
+                continuousScale: client.latestState == .blocked ? 1.30 : 1.15,
+                alert: client.latestState == .blocked
             )
-            .onChange(of: client.latestState) { _, _ in
+            .onChange(of: client.latestState) { _ in
                 latestBreath += 1
             }
             .help("最近状态：" + client.latestState.statusText)
@@ -163,10 +290,7 @@ struct TrafficLightView: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 9)
         .frame(minWidth: 0)
-        .background(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(Color.black.opacity(0.45))
-        )
+        .background(glassBackground)
         .overlay(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .stroke(Color.white.opacity(0.18), lineWidth: 1)
@@ -208,7 +332,7 @@ struct TrafficLightView: View {
             ForEach(visible) { session in
                 SessionRow(
                     session: session,
-                    recent: client.isStateRecent(session.sessionId),
+                    changeTick: client.stateChangeTick[session.sessionId] ?? 0,
                     breaths: client.breathCount,
                     beatDuration: client.breathBeat,
                     onOpen: { client.openSession(session.sessionId) }
@@ -231,7 +355,7 @@ struct TrafficLightView: View {
                     ForEach(all.dropFirst(maxVisibleRows)) { session in
                         SessionRow(
                             session: session,
-                            recent: client.isStateRecent(session.sessionId),
+                            changeTick: client.stateChangeTick[session.sessionId] ?? 0,
                             breaths: client.breathCount,
                             beatDuration: client.breathBeat,
                             onOpen: { client.openSession(session.sessionId) }
@@ -247,11 +371,12 @@ struct TrafficLightView: View {
 }
 
 /// One subscribed session: lamp + title + state line (+ transient detail when
-/// blocked) + unsubscribe. The lamp breathes when `recent` turns true — i.e.
-/// right after this session's state changed — then settles back to resting.
+/// blocked) + unsubscribe. The lamp breathes on every recorded state/detail
+/// change (monotonic tick), then settles back to resting.
 private struct SessionRow: View {
     let session: SessionStatus
-    let recent: Bool
+    /// Bumped by StatusClient on every recorded state/detail change.
+    let changeTick: Int
     /// Breathing config from settings (forwarded to the lamp).
     let breaths: Int
     let beatDuration: TimeInterval
@@ -270,10 +395,14 @@ private struct SessionRow: View {
                 size: lampSize,
                 breath: breath,
                 breaths: breaths,
-                beatDuration: beatDuration
+                beatDuration: beatDuration,
+                continuous: session.light == .running || session.light == .blocked,
+                continuousPeriod: session.light == .blocked ? 0.9 : 1.8,
+                continuousScale: session.light == .blocked ? 1.38 : 1.20,
+                alert: session.light == .blocked
             )
-            .onChange(of: recent) { _, newValue in
-                if newValue { breath += 1 }
+            .onChange(of: changeTick) { _ in
+                breath += 1
             }
             VStack(alignment: .leading, spacing: 1) {
                 Text(session.title)
@@ -352,7 +481,7 @@ extension TrafficLightView {
     /// (see TrafficLightHostingView.interactiveZones).
     private var closeButton: some View {
         Button {
-            mover.quit()
+            client.closeOverlay()
         } label: {
             Image(systemName: "xmark")
                 .font(.system(size: 11, weight: .bold))
@@ -362,15 +491,33 @@ extension TrafficLightView {
                 .cornerRadius(5)
         }
         .buttonStyle(.plain)
-        .help("关闭红绿灯")
+        .help("关闭红绿灯（取消所有订阅）")
     }
 
     /// Minimize / expand toggle: hides (or restores) the row list,
     /// leaving only the persistent title bar.
+    /// Dock the traffic light into the DSH sidebar (the in-page twin shows up
+    /// in the official `sidebar.footer.action` slot) and hide this panel.
+    private var dockButton: some View {
+        Button {
+            client.setMode("docked")
+        } label: {
+            Image(systemName: "sidebar.left")
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundColor(.white.opacity(0.7))
+                .frame(width: 18, height: 18)
+                .background(Color.white.opacity(0.08))
+                .cornerRadius(5)
+        }
+        .buttonStyle(.plain)
+        .help("固定到 DSH 侧边栏")
+    }
+
     private var minimizeButton: some View {
         Button {
-            let newValue = !minimized
-            withAnimation(.easeInOut(duration: 0.15)) { minimized = newValue }
+            // No withAnimation here: the layout animation makes AppKit's
+            // constraint pass resize the window and shift its origin.
+            minimized.toggle()
         } label: {
             Image(systemName: minimized ? "plus" : "minus")
                 .font(.system(size: 11, weight: .bold))
@@ -430,6 +577,12 @@ struct BreathingLamp: View {
     var breaths: Int = 3
     /// One beat = scale up over `beat`, hold, then scale back over `beat`.
     var beatDuration: TimeInterval = 0.35
+    /// Gentle continuous breathing while the task is still running (or blocked).
+    var continuous: Bool = false
+    var continuousPeriod: Double = 1.8
+    var continuousScale: CGFloat = 1.08
+    /// Blocked state: adds an expanding ring so the red lamp is unmistakable.
+    var alert: Bool = false
 
     @State private var scale: CGFloat = 1
     @State private var cycleTask: Task<Void, Never>?
@@ -437,9 +590,20 @@ struct BreathingLamp: View {
     var body: some View {
         // Use scaleEffect for visual scaling — changing `size` directly would
         // trigger a layout pass that deforms the panel's rounded corners.
-        Lamp(color: color, active: active, size: size)
+        ZStack {
+            if continuous {
+                ContinuousBreathing(period: continuousPeriod, amplitude: continuousScale) {
+                    Lamp(color: color, active: active, size: size)
+                }
+            } else {
+                Lamp(color: color, active: active, size: size)
+            }
+            if alert {
+                AlertRipple(color: color, size: size)
+            }
+        }
             .scaleEffect(scale)
-            .onChange(of: breath) { _, newValue in
+            .onChange(of: breath) { newValue in
                 guard newValue > 0 else { return }
                 cycleTask?.cancel()
                 let fresh = Task { @MainActor in
@@ -460,6 +624,54 @@ struct BreathingLamp: View {
             try? await Task.sleep(for: .seconds(beatDuration))
         }
         scale = 1
+    }
+}
+
+/// Expanding, fading ring for the blocked state. Clock-driven for the same
+/// reason as ContinuousBreathing (a repeating SwiftUI animation is reset by the
+/// 0.7 s status poll).
+private struct AlertRipple: View {
+    let color: Color
+    let size: CGFloat
+    private let cycle: Double = 0.9
+
+    var body: some View {
+        TimelineView(.animation(minimumInterval: 1.0 / 15.0)) { context in
+            let t = context.date.timeIntervalSinceReferenceDate
+            let phase = (t.truncatingRemainder(dividingBy: cycle)) / cycle
+            Circle()
+                .stroke(color.opacity(0.7), lineWidth: 2)
+                .frame(width: size, height: size)
+                .scaleEffect(1.0 + 1.1 * phase)
+                .opacity(1.0 - phase)
+        }
+        .allowsHitTesting(false)
+    }
+}
+
+/// Slow, ever-running “breathing”. Rendered only while a task is active, so
+/// leaving the running/blocked state tears the TimelineView down with it.
+///
+/// A `repeatForever` animation started in `onAppear` did not survive the
+/// overlay's 0.7 s status poll (each re-render restarted it), so the scale is
+/// derived from the clock on every frame instead — re-renders cannot cancel it.
+private struct ContinuousBreathing<Content: View>: View {
+    let period: Double
+    let amplitude: CGFloat
+    let content: Content
+
+    init(period: Double, amplitude: CGFloat, @ViewBuilder content: () -> Content) {
+        self.period = period
+        self.amplitude = amplitude
+        self.content = content()
+    }
+
+    var body: some View {
+        TimelineView(.animation(minimumInterval: 1.0 / 15.0)) { context in
+            let t = context.date.timeIntervalSinceReferenceDate
+            let phase = 0.5 + 0.5 * sin(2 * .pi * t / period)
+            content.scaleEffect(1 + (amplitude - 1) * phase)
+        }
     }
 }
 
