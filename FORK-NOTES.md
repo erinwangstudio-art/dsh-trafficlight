@@ -24,6 +24,10 @@
 - 普通模式右侧边缘可拖动调整宽度；手动宽度持久化。
 - 默认自动宽度 `165pt`，最小 `150pt`，最大 `560pt`。
 - 保留已编译的 macOS arm64 `TrafficLightOverlay` 二进制。
+- 插件市场展示元数据：
+  - 中文名称：`任务状态灯`
+  - 中文简介：见 `locale/zh.json` 的 `meta.description`
+  - 图标：包根 `icon.svg`（红黄绿三色交通灯）
 
 完整补丁细节见 [docs/LOCAL-PATCHES.md](./docs/LOCAL-PATCHES.md)。
 

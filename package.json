@@ -1,7 +1,8 @@
 {
   "name": "@erinwangstudio-art/dsh-trafficlight",
+  "icon": "icon.svg",
   "description": "Fork of dsh-trafficlight for DSH Desktop: per-session traffic-light states, a macOS floating overlay with native Liquid Glass, a dockable in-page sidebar twin, subscribed-session navigation, real conversation titles, persisted settings, and drawn resize affordances.",
-  "version": "0.4.0-fork.2",
+  "version": "0.4.0-fork.3",
   "publishConfig": {
     "access": "public"
   },
@@ -10,6 +11,8 @@
   "exports": {
     ".": "./lib/index.js",
     "./client": "./lib/client.js",
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg",
     "./package.json": "./package.json"
   },
   "dsh": {
@@ -46,6 +49,8 @@
     "overlay",
     "traffic-light",
     "status",
+    "任务状态灯",
+    "task-status-light",
     "macos",
     "cordis-plugin",
     "dsh-plugin"
@@ -79,6 +84,8 @@
     "overlay",
     "scripts",
     "docs",
+    "locale/*.json",
+    "icon.svg",
     "mock-bridge.mjs",
     "cordis.patch.yml",
     "README.md",
