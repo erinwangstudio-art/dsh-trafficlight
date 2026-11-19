@@ -2,7 +2,7 @@
 
 这是基于 `@chivaskong96/dsh-trafficlight@0.3.0` 的本地 fork，面向 **DSH Desktop 0.2.2-rc.3** 修复和增强。
 
-包名仍保持 `@chivaskong96/dsh-trafficlight`，因为插件的 Cordis patch 和 client 注入依赖该标识；修改的是 fork 内容、版本号、说明和仓库地址。
+包名为 `@erinwangstudio-art/dsh-trafficlight`，与 GitHub 仓库一致；插件的 Cordis patch 和 client bundle 标识已同步更新。上游原始包为 `@chivaskong96/dsh-trafficlight`。
 
 ## 已包含改动
 
@@ -40,7 +40,7 @@ dsh plugin --profile desktop add github:erinwangstudio-art/dsh-trafficlight
 安装后重启 DSH Desktop。若悬浮窗没有自动出现，在任意会话头部点击「🚦 订阅」，或手动启动：
 
 ```bash
-bash "$HOME/.dsh/profiles/desktop/node_modules/@chivaskong96/dsh-trafficlight/scripts/trafficlight.sh"
+bash "$HOME/.dsh/profiles/desktop/node_modules/@erinwangstudio-art/dsh-trafficlight/scripts/trafficlight.sh"
 ```
 
 ## 重要说明

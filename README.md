@@ -128,7 +128,7 @@ DSH_TL_OVERLAY_SDKROOT=/Library/Developer/CommandLineTools/SDKs/MacOSX26.2.sdk b
 把新编译的悬浮窗换进已安装的插件并重启：
 
 ```bash
-P="$HOME/.dsh/profiles/desktop/node_modules/@chivaskong96/dsh-trafficlight"
+P="$HOME/.dsh/profiles/desktop/node_modules/@erinwangstudio-art/dsh-trafficlight"
 ```
 
 ```bash

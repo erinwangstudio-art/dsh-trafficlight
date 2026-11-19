@@ -74,13 +74,13 @@
 
 ```bash
 DSH_TL_OVERLAY_SDKROOT=/Library/Developer/CommandLineTools/SDKs/MacOSX26.2.sdk \
-  bash "$HOME/.dsh/profiles/desktop/node_modules/@chivaskong96/dsh-trafficlight/overlay/build.sh"
+  bash "$HOME/.dsh/profiles/desktop/node_modules/@erinwangstudio-art/dsh-trafficlight/overlay/build.sh"
 ```
 
 3. 重启悬浮窗：
 
 ```bash
-bash "$HOME/.dsh/profiles/desktop/node_modules/@chivaskong96/dsh-trafficlight/scripts/trafficlight.sh" --restart
+bash "$HOME/.dsh/profiles/desktop/node_modules/@erinwangstudio-art/dsh-trafficlight/scripts/trafficlight.sh" --restart
 ```
 
 本机环境：Swift 6.2.4 + macOS 26.2 SDK（不要用 build.sh 默认的 15.4 SDK，会与编译器不匹配）。
