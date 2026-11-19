@@ -2,6 +2,20 @@ import AppKit
 import Foundation
 import SwiftUI
 
+/// Known DSH Desktop bundle identifiers, newest packaged build first.
+enum DSHDesktopApp {
+    static let bundleIds = ["com.deepseek.dsh", "ai.deepseek.dsh.desktop.next"]
+
+    static func runningApplication() -> NSRunningApplication? {
+        for bundleId in bundleIds {
+            if let app = NSRunningApplication.runningApplications(withBundleIdentifier: bundleId).first {
+                return app
+            }
+        }
+        return nil
+    }
+}
+
 /// Polls the dsh-trafficlight bridge and exposes the subscribed session list
 /// to SwiftUI — one traffic-light row per subscribed session.
 final class StatusClient: ObservableObject {
@@ -109,30 +123,25 @@ final class StatusClient: ObservableObject {
 
     /// Bring the DSH Desktop window to the front, restoring it when minimized.
     ///
-    /// Upstream opened `dsh://open` here, but DSH Desktop NEXT registers no
-    /// `dsh://` URL scheme (`CFBundleURLTypes` is absent), so macOS popped
-    /// "There is no application set to open the URL dsh://open".
-    ///
-    /// Plain `NSRunningApplication.activate` is not enough either: it brings
-    /// the app forward but leaves a minimized window in the Dock. DSH restores
-    /// minimized windows from its Electron `activate` handler
-    /// (`app.on("activate", openMain)`), and `openMain()` → `show(window)`
-    /// runs `window.restore()`. LaunchServices only posts that reopen event
-    /// when the running app is asked to open again — the dock-click path —
-    /// which `NSWorkspace.openApplication` does.
+    /// Support both the packaged Desktop (`com.deepseek.dsh`) and the NEXT
+    /// build (`ai.deepseek.dsh.desktop.next`). Upstream opened `dsh://open`,
+    /// but the current Desktop registers no usable `dsh://` handler for this.
     static func raiseDesktopApp() {
-        let bundleId = "ai.deepseek.dsh.desktop.next"
-        guard let appURL = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleId) else {
-            activateRunning(bundleId)
+        for bundleId in DSHDesktopApp.bundleIds {
+            guard let appURL = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleId) else { continue }
+            let configuration = NSWorkspace.OpenConfiguration()
+            configuration.activates = true
+            configuration.createsNewApplicationInstance = false
+            NSWorkspace.shared.openApplication(at: appURL, configuration: configuration) { app, _ in
+                // LaunchServices can refuse (busy app, policy); fall back to
+                // plain activation so the row never becomes a dead click.
+                if app == nil { activateRunning(bundleId) }
+            }
             return
         }
-        let configuration = NSWorkspace.OpenConfiguration()
-        configuration.activates = true
-        configuration.createsNewApplicationInstance = false
-        NSWorkspace.shared.openApplication(at: appURL, configuration: configuration) { app, _ in
-            // LaunchServices can refuse (busy app, policy); fall back to plain
-            // activation so the row never becomes a dead click.
-            if app == nil { activateRunning(bundleId) }
+        if let app = DSHDesktopApp.runningApplication() {
+            _ = app.unhide()
+            app.activate(options: [.activateAllWindows])
         }
     }
 

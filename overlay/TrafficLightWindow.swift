@@ -175,6 +175,14 @@ final class PassThroughEffectView: NSVisualEffectView {
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
 }
 
+/// The floating panel is non-activating, so the first click in another app is
+/// normally swallowed while the panel merely becomes current. The drag grips
+/// opt into first-mouse delivery; the SwiftUI rows need the same treatment or
+/// clicking a session looks like a dead click until the second try.
+final class FirstMouseHostingView<Content: View>: NSHostingView<Content> {
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+}
+
 /// Container that guarantees the layering “glass → content”.
 ///
 /// On macOS 26+ the backdrop is the system's real Liquid Glass
@@ -206,7 +214,7 @@ final class GlassPanelView: NSView {
     private let forcesVibrancy = ProcessInfo.processInfo.environment["DSH_TL_FORCE_VIBRANCY"] == "1"
 
     init<Content: View>(rootView: Content) {
-        let host = NSHostingView(rootView: AnyView(rootView))
+        let host = FirstMouseHostingView(rootView: AnyView(rootView))
         // PanelMover owns the window size. Without this, NSHostingView adds
         // min/max/intrinsic size constraints from the SwiftUI content, which
         // fight the autoresizing frame whenever the body switches between the

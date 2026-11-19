@@ -9,6 +9,7 @@ import SwiftUI
 /// The overlay only ever needs the AppKit floating panel, so start NSApp
 /// directly and keep SwiftUI for the view content only.
 @main
+@MainActor
 enum TrafficLightMain {
     /// NSApplication.delegate is weak — keep the delegate alive here.
     static let appDelegate = AppDelegate()
@@ -200,7 +201,7 @@ final class PanelMover: ObservableObject {
     /// Frame of the DSH desktop main window in CoreGraphics (top-left origin)
     /// coordinates. No Accessibility permission is needed for window bounds.
     private func panelMover_dshWindowFrame() -> CGRect? {
-        guard let app = NSRunningApplication.runningApplications(withBundleIdentifier: "ai.deepseek.dsh.desktop.next").first else { return nil }
+        guard let app = DSHDesktopApp.runningApplication() else { return nil }
         let pid = app.processIdentifier
         guard let infos = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] else { return nil }
         var best: CGRect?
@@ -240,6 +241,7 @@ final class PanelMover: ObservableObject {
     }
 
     /// Collapse/expand the panel while keeping its top edge fixed on screen.
+    @MainActor
     func setMinimized(_ minimized: Bool) {
         guard let panel else { return }
         if minimized {
