@@ -1,5 +1,7 @@
 # dsh-trafficlight
 
+[![DSH Market 已收录](https://raw.githubusercontent.com/2BingLing/dsh-market/master/assets/readme/badge-listed-zh.svg)](https://dsh.market/)
+
 > 插件市场名称：**任务状态灯 (dsh-trafficlight)**
 
 DSH任务状态红绿灯：订阅会话后，每个会话用一盏灯显示进度，等你批准时亮红灯，执行中亮黄灯，完成后亮绿灯。灯可以浮在所有窗口最上层，也可以收进DSH侧栏。
