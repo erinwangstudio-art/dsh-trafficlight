@@ -24,6 +24,12 @@ export const DEFAULT_BREATH_BEAT = 0.35
 export const BREATH_BEAT_MIN = 0.1
 export const BREATH_BEAT_MAX = 1.0
 
+/** Status cue sound. Default on at a moderate volume. */
+export const DEFAULT_SOUND_ENABLED = true
+export const DEFAULT_SOUND_VOLUME = 0.6
+export const SOUND_VOLUME_MIN = 0
+export const SOUND_VOLUME_MAX = 1
+
 /** Where the traffic light lives: the floating macOS panel or the DSH sidebar. */
 export const DEFAULT_MODE: PresentationMode = 'floating'
 export const MODES: PresentationMode[] = ['floating', 'docked']
@@ -66,6 +72,8 @@ export class SettingsStore {
   private breathCountValue: number = DEFAULT_BREATH_COUNT
   private breathBeatValue: number = DEFAULT_BREATH_BEAT
   private modeValue: PresentationMode = DEFAULT_MODE
+  private soundEnabledValue = DEFAULT_SOUND_ENABLED
+  private soundVolumeValue: number = DEFAULT_SOUND_VOLUME
   private readonly file: string
   private readonly ctx: Context
   private saveTimer: ReturnType<typeof setTimeout> | undefined
@@ -98,6 +106,27 @@ export class SettingsStore {
   /** Presentation mode: 'floating' (macOS panel) or 'docked' (in-page sidebar). */
   mode(): PresentationMode {
     return this.modeValue
+  }
+
+  soundEnabled(): boolean {
+    return this.soundEnabledValue
+  }
+
+  soundVolume(): number {
+    return this.soundVolumeValue
+  }
+
+  setSoundEnabled(value: unknown): boolean {
+    this.soundEnabledValue = value === true
+    this.scheduleSave()
+    return this.soundEnabledValue
+  }
+
+  setSoundVolume(value: unknown): number {
+    if (typeof value !== 'number' || !Number.isFinite(value)) return this.soundVolumeValue
+    this.soundVolumeValue = Math.min(SOUND_VOLUME_MAX, Math.max(SOUND_VOLUME_MIN, Math.round(value * 100) / 100))
+    this.scheduleSave()
+    return this.soundVolumeValue
   }
 
   /** Set the presentation mode and persist. Returns the accepted value. */
@@ -146,6 +175,8 @@ export class SettingsStore {
         if (obj.breathCount !== undefined) this.breathCountValue = clampBreathCount(obj.breathCount)
         if (obj.breathBeat !== undefined) this.breathBeatValue = clampBreathBeat(obj.breathBeat)
         if (obj.mode !== undefined) this.modeValue = clampMode(obj.mode)
+        if (obj.soundEnabled !== undefined) this.soundEnabledValue = obj.soundEnabled === true
+        if (obj.soundVolume !== undefined) this.setSoundVolume(obj.soundVolume)
       }
     } catch {
       // First run / corrupt file → defaults.
@@ -170,6 +201,8 @@ export class SettingsStore {
           breathCount: this.breathCountValue,
           breathBeat: this.breathBeatValue,
           mode: this.modeValue,
+          soundEnabled: this.soundEnabledValue,
+          soundVolume: this.soundVolumeValue,
         }, null, 2), 'utf8')
       fs.renameSync(tmp, this.file)
     } catch (error) {

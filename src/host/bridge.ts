@@ -187,6 +187,20 @@ export function startStandaloneServer(status: StatusMachine, port: number, ctx: 
       })
       return
     }
+    if (req.method === 'GET' && url.pathname === '/sound') {
+      res.writeHead(200, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' })
+      const s = status.snapshot()
+      res.end(JSON.stringify({ ok: true, value: { soundEnabled: s.soundEnabled, soundVolume: s.soundVolume } }))
+      return
+    }
+    if (req.method === 'POST' && url.pathname === '/sound') {
+      const body = await readJson(req)
+      const soundEnabled = status.setSoundEnabled(body?.soundEnabled)
+      const soundVolume = status.setSoundVolume(body?.soundVolume)
+      res.writeHead(200, { 'content-type': 'application/json; charset=utf-8' })
+      res.end(JSON.stringify({ ok: true, value: { soundEnabled, soundVolume } }))
+      return
+    }
     if (req.method === 'GET' && url.pathname === '/breath') {
       res.writeHead(200, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' })
       const s = status.snapshot()
@@ -388,6 +402,20 @@ export function registerWebRoutes(ctx: Context, status: StatusMachine): () => vo
       const accepted = status.setMode(body?.mode)
       res.writeHead(200, { 'content-type': 'application/json; charset=utf-8' })
       res.end(JSON.stringify({ ok: true, value: { mode: accepted } }))
+      return
+    }
+    if (req.method === 'GET' && url.pathname === '/api/dsh-tl/sound') {
+      res.writeHead(200, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' })
+      const s = status.snapshot()
+      res.end(JSON.stringify({ ok: true, value: { soundEnabled: s.soundEnabled, soundVolume: s.soundVolume } }))
+      return
+    }
+    if (req.method === 'POST' && url.pathname === '/api/dsh-tl/sound') {
+      const body = await readJson(req)
+      const soundEnabled = status.setSoundEnabled(body?.soundEnabled)
+      const soundVolume = status.setSoundVolume(body?.soundVolume)
+      res.writeHead(200, { 'content-type': 'application/json; charset=utf-8' })
+      res.end(JSON.stringify({ ok: true, value: { soundEnabled, soundVolume } }))
       return
     }
     if (req.method === 'GET' && url.pathname === '/api/dsh-tl/breath') {

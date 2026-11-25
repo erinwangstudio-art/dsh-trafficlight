@@ -270,6 +270,8 @@ export class StatusMachine {
       breathCount: this.settings.breathCount(),
       breathBeat: this.settings.breathBeat(),
       mode: this.settings.mode(),
+      soundEnabled: this.settings.soundEnabled(),
+      soundVolume: this.settings.soundVolume(),
       dockHealthy: Date.now() - this.dockBeatAt < 15_000,
       updatedAt: Date.now(),
     }
@@ -286,6 +288,18 @@ export class StatusMachine {
   /** Overlay minimal (single-lamp) mode setting. Mutating it bumps + notifies. */
   setMinimalMode(value: unknown): boolean {
     const accepted = this.settings.setMinimalMode(value)
+    this.bump()
+    return accepted
+  }
+
+  setSoundEnabled(value: unknown): boolean {
+    const accepted = this.settings.setSoundEnabled(value)
+    this.bump()
+    return accepted
+  }
+
+  setSoundVolume(value: unknown): number {
+    const accepted = this.settings.setSoundVolume(value)
     this.bump()
     return accepted
   }

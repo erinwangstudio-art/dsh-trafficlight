@@ -26,6 +26,9 @@ const zh: Record<string, string> = {
   'breathCount.unit': ' 次',
   'breathBeat.label': '呼吸速度',
   'breathBeat.desc': '每次放大或回落的持续时间',
+  'sound.label': '状态提示音',
+  'sound.desc': '会话阻塞或完成时播放系统提示音',
+  'soundVolume.label': '提示音量',
   'preview.title': '预览',
   'preview.desc': '实时预览当前参数效果',
   'preview.running': '执行中',
@@ -45,6 +48,9 @@ const en: Record<string, string> = {
   'breathCount.unit': '',
   'breathBeat.label': 'Breath Speed',
   'breathBeat.desc': 'Duration of each scale-up / scale-down',
+  'sound.label': 'Status Cue Sound',
+  'sound.desc': 'Play a system sound when a session becomes blocked or done',
+  'soundVolume.label': 'Cue Volume',
   'preview.title': 'Preview',
   'preview.desc': 'Live preview of current parameter effects',
   'preview.running': 'Running',
@@ -102,6 +108,9 @@ const BREATH_COUNT_MAX = 6
 const BREATH_BEAT_MIN = 0.1
 const BREATH_BEAT_MAX = 1.0
 const BREATH_BEAT_STEP = 0.05
+const SOUND_VOLUME_MIN = 0
+const SOUND_VOLUME_MAX = 1
+const SOUND_VOLUME_STEP = 0.05
 
 async function fetchOpacity(): Promise<number> {
   try {
@@ -161,6 +170,30 @@ async function saveBreath(count: number, beat: number): Promise<void> {
     await fetch('/api/dsh-tl/breath', {
       method: 'POST', headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ breathCount: count, breathBeat: beat }), cache: 'no-store',
+    })
+  } catch { /* ignore */ }
+}
+
+async function fetchSound(): Promise<{ enabled: boolean; volume: number }> {
+  try {
+    const res = await fetch('/api/dsh-tl/sound', { cache: 'no-store' })
+    if (!res.ok) return { enabled: true, volume: 0.6 }
+    const body = (await res.json()) as { ok: boolean; value?: { soundEnabled?: unknown; soundVolume?: unknown } }
+    if (body.ok && body.value) {
+      return {
+        enabled: body.value.soundEnabled === true,
+        volume: typeof body.value.soundVolume === 'number' ? body.value.soundVolume : 0.6,
+      }
+    }
+  } catch { /* ignore */ }
+  return { enabled: true, volume: 0.6 }
+}
+
+async function saveSound(enabled: boolean, volume: number): Promise<void> {
+  try {
+    await fetch('/api/dsh-tl/sound', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ soundEnabled: enabled, soundVolume: volume }), cache: 'no-store',
     })
   } catch { /* ignore */ }
 }
@@ -289,12 +322,14 @@ function TrafficLightSection({ t }: { t?: (key: string) => string }): React.JSX.
   const [minimal, setMinimal] = React.useState(false)
   const [breathCount, setBreathCount] = React.useState(3)
   const [breathBeat, setBreathBeat] = React.useState(0.35)
+  const [soundEnabled, setSoundEnabled] = React.useState(true)
+  const [soundVolume, setSoundVolume] = React.useState(0.6)
   const [ready, setReady] = React.useState(false)
 
   React.useEffect(() => {
     let alive = true
-    void Promise.all([fetchOpacity(), fetchMinimalMode(), fetchBreath()]).then(([o, m, b]) => {
-      if (alive) { setOpacity(o); setMinimal(m); setBreathCount(b.count); setBreathBeat(b.beat); setReady(true) }
+    void Promise.all([fetchOpacity(), fetchMinimalMode(), fetchBreath(), fetchSound()]).then(([o, m, b, s]) => {
+      if (alive) { setOpacity(o); setMinimal(m); setBreathCount(b.count); setBreathBeat(b.beat); setSoundEnabled(s.enabled); setSoundVolume(s.volume); setReady(true) }
     })
     return () => { alive = false }
   }, [])
@@ -304,6 +339,11 @@ function TrafficLightSection({ t }: { t?: (key: string) => string }): React.JSX.
     setOpacity(v); void saveOpacity(v)
   }
   const onMinimalChange = (v: boolean): void => { setMinimal(v); void saveMinimalMode(v) }
+  const onSoundEnabledChange = (v: boolean): void => { setSoundEnabled(v); void saveSound(v, soundVolume) }
+  const onSoundVolumeChange = (e: React.ChangeEvent<HTMLInputElement>): void => {
+    const v = Math.min(SOUND_VOLUME_MAX, Math.max(SOUND_VOLUME_MIN, Math.round(Number(e.target.value) * 100) / 100))
+    setSoundVolume(v); void saveSound(soundEnabled, v)
+  }
   const onBreathCountChange = (e: React.ChangeEvent<HTMLInputElement>): void => {
     const v = Math.min(BREATH_COUNT_MAX, Math.max(BREATH_COUNT_MIN, Math.round(Number(e.target.value) || 1)))
     setBreathCount(v); void saveBreath(v, breathBeat)
@@ -351,6 +391,18 @@ function TrafficLightSection({ t }: { t?: (key: string) => string }): React.JSX.
         <SettingsRow label={tl('minimal.label')} hint={tl('minimal.desc')}>
           <div style={{ flex: 1 }} />
           <StyledCheckbox checked={minimal} disabled={!ready} onChange={onMinimalChange} label={tl('minimal.label')} />
+        </SettingsRow>
+        <SettingsRow label={tl('sound.label')} hint={tl('sound.desc')}>
+          <div style={{ flex: 1 }} />
+          <StyledCheckbox checked={soundEnabled} disabled={!ready} onChange={onSoundEnabledChange} label={tl('sound.label')} />
+        </SettingsRow>
+        <SettingsRow label={tl('soundVolume.label')}>
+          <input aria-label={tl('soundVolume.label')} type="range"
+            min={SOUND_VOLUME_MIN} max={SOUND_VOLUME_MAX} step={SOUND_VOLUME_STEP} value={soundVolume}
+            disabled={!ready || !soundEnabled} onChange={onSoundVolumeChange} style={{ flex: 1, minWidth: 0 }} />
+          <span style={{ ...LABEL_SECONDARY, width: VALUE_WIDTH, textAlign: 'right', fontVariantNumeric: 'tabular-nums', flexShrink: 0 }}>
+            {Math.round(soundVolume * 100)}%
+          </span>
         </SettingsRow>
         <SettingsRow label={tl('breathCount.label')} hint={tl('breathCount.desc')}>
           <input aria-label={tl('breathCount.label')} type="range"

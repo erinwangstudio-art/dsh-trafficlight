@@ -55,6 +55,10 @@ export interface TrafficSnapshot {
   breathBeat: number
   /** Where the light lives: the macOS floating panel, or docked inside the DSH sidebar. */
   mode: PresentationMode
+  /** Whether status cue sounds are enabled. */
+  soundEnabled: boolean
+  /** Cue sound volume (0..1). */
+  soundVolume: number
   /** True while the in-page docked panel is reporting in (heartbeat < 15 s old). */
   dockHealthy: boolean
   /** Epoch milliseconds when this snapshot was produced. */
