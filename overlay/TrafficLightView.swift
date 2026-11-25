@@ -33,6 +33,8 @@ struct TrafficSnapshot: Codable {
     let breathBeat: Double?
     let detail: String?
     let mode: String?
+    let soundEnabled: Bool?
+    let soundVolume: Double?
     let updatedAt: Int
 }
 

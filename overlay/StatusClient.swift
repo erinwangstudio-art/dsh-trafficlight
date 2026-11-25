@@ -33,6 +33,9 @@ final class StatusClient: ObservableObject {
     @Published var breathBeat: Double = 0.35
     /// Where the light lives: "floating" (this panel) or "docked" (DSH sidebar).
     @Published var mode: String = "floating"
+    /// User-configured status cue sound.
+    private var soundEnabled = true
+    private var soundVolume: Double = 0.6
     /// Fired on the main queue whenever the mode changes (local click or host poll).
     var onModeChanged: ((String) -> Void)?
     /// The most-recently-changed subscribed session's light state. Drives the
@@ -60,7 +63,17 @@ final class StatusClient: ObservableObject {
         return Date().timeIntervalSince(date) < within
     }
 
-    private func recordChange(_ id: String, newState: TrafficState) {
+    /// Play a built-in macOS sound for attention-worthy transitions only.
+    /// Initial rows and detail-only changes are deliberately silent.
+    private func playCue(_ state: TrafficState) {
+        guard soundEnabled, soundVolume > 0 else { return }
+        guard let name: String = state == .blocked ? "Basso" : (state == .done ? "Glass" : nil),
+              let sound = NSSound(named: name) else { return }
+        sound.volume = Float(min(1, max(0, soundVolume)))
+        sound.play()
+    }
+
+    private func recordChange(_ id: String, newState: TrafficState, playSound: Bool = false) {
         let now = Date()
         stateChangedAt[id] = now
         stateChangeTick[id, default: 0] += 1
@@ -69,6 +82,7 @@ final class StatusClient: ObservableObject {
             let cutoff = Date(timeIntervalSinceNow: -6)
             stateChangedAt = stateChangedAt.filter { $0.value > cutoff }
         }
+        if playSound { playCue(newState) }
         // The big lamp follows the newest change in the whole subscribed set.
         if now >= lastChangeAt {
             lastChangeAt = now
@@ -82,7 +96,10 @@ final class StatusClient: ObservableObject {
         for s in newSessions {
             if let prev = old[s.sessionId] {
                 if prev.state != s.state || (prev.detail ?? "") != (s.detail ?? "") {
-                    recordChange(s.sessionId, newState: TrafficState(rawValue: s.state) ?? .offline)
+                    let next = TrafficState(rawValue: s.state) ?? .offline
+                    let stateChanged = prev.state != s.state
+                    recordChange(s.sessionId, newState: next,
+                                 playSound: stateChanged && (next == .blocked || next == .done))
                 }
             } else {
                 recordChange(s.sessionId, newState: TrafficState(rawValue: s.state) ?? .offline) // brand-new row counts as a change
@@ -244,6 +261,10 @@ final class StatusClient: ObservableObject {
                 }
                 if let beat = snap.breathBeat {
                     self.breathBeat = min(1.0, max(0.1, beat))
+                }
+                self.soundEnabled = snap.soundEnabled ?? true
+                if let volume = snap.soundVolume {
+                    self.soundVolume = min(1, max(0, volume))
                 }
                 if let mode = snap.mode, (mode == "floating" || mode == "docked"), mode != self.mode {
                     self.mode = mode
