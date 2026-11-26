@@ -14,7 +14,8 @@
   - DSH Web → `GET /api/dsh-tl/focus`
   - 页面调用 `uiWorkspace.openSession(id)`，兼容 `sessions.open(id)`。
   - 浮窗使用首次点击接收（`acceptsFirstMouse`），并兼容 `com.deepseek.dsh` 与 `ai.deepseek.dsh.desktop.next` 两种 Desktop bundle id。
-- 状态提示音：会话进入阻塞或完成状态时播放 macOS 内置提示音；设置面板提供开关和 0–100% 音量，默认开启、60% 音量；订阅首次出现和执行中状态不发声。
+- 状态提示音：会话进入阻塞或完成状态时播放 macOS 内置提示音；设置面板提供开关和 0–100% 音量，默认开启、60% 音量；订阅首次出现和执行中状态不发声。阻塞使用约 1.5 秒的 Ping 音，完成使用 Glass。
+- 设置区域若 locale 翻译器原样返回 key，会回退到内置中文文案，避免界面出现 `sound.label` 等原始 key。
 - 悬浮窗标题优先使用真实对话标题：
   - DSH `sessionTitle` 服务；
   - 会话标题投影缓存 `session_projcache`；

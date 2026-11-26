@@ -316,7 +316,10 @@ function PreviewLamp({ color, breathCount, breathBeat, opacity }: {
 // ── TrafficLightSection (settings.section component) ───────────────────
 
 function TrafficLightSection({ t }: { t?: (key: string) => string }): React.JSX.Element {
-  const tl = (key: string): string => t?.(key) ?? (zh[key] ?? key)
+  const tl = (key: string): string => {
+    const translated = t?.(key)
+    return translated && translated !== key ? translated : (zh[key] ?? key)
+  }
 
   const [opacity, setOpacity] = React.useState(OPACITY_MAX)
   const [minimal, setMinimal] = React.useState(false)

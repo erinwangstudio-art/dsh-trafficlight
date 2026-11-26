@@ -67,7 +67,8 @@ final class StatusClient: ObservableObject {
     /// Initial rows and detail-only changes are deliberately silent.
     private func playCue(_ state: TrafficState) {
         guard soundEnabled, soundVolume > 0 else { return }
-        guard let name: String = state == .blocked ? "Basso" : (state == .done ? "Glass" : nil),
+        // Ping is a more noticeable ~1.5s cue than Basso (~0.8s) for pending attention.
+        guard let name: String = state == .blocked ? "Ping" : (state == .done ? "Glass" : nil),
               let sound = NSSound(named: name) else { return }
         sound.volume = Float(min(1, max(0, soundVolume)))
         sound.play()
