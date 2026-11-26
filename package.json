@@ -1,7 +1,7 @@
 {
   "name": "@erinwangstudio-art/dsh-trafficlight",
   "icon": "icon.svg",
-  "description": "Fork of dsh-trafficlight for DSH Desktop: per-session traffic-light states, a macOS floating overlay with native Liquid Glass, a dockable in-page sidebar twin, subscribed-session navigation, real conversation titles, persisted settings, and drawn resize affordances.",
+  "description": "Fork of dsh-trafficlight for DSH Desktop: per-session traffic-light states, a macOS floating overlay with native Liquid Glass, a dockable in-page sidebar twin, subscribed-session navigation, real conversation titles, status cue sounds with volume control, persisted settings, and drawn resize affordances.",
   "version": "0.4.0-fork.8",
   "publishConfig": {
     "access": "public"

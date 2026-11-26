@@ -1,6 +1,6 @@
 {
   "meta": {
     "title": "Task Status Light (dsh-trafficlight)",
-    "description": "Traffic-light status for DSH sessions: subscribe a session to track running, blocked, and done states in a macOS floating overlay or the in-page sidebar; click a row to return to its conversation."
+    "description": "Traffic-light status for DSH sessions: subscribe a session to track running, blocked, and done states in a macOS floating overlay or the in-page sidebar; click a row to return to its conversation, with adjustable cues for blocked and done states."
   }
 }

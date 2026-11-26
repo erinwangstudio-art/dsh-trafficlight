@@ -55,7 +55,7 @@ dsh plugin --profile desktop add /path/to/dsh-trafficlight
 | 🟢 | `done` | 回合已结束 | 常亮 |
 | ⚪ | `idle`/`offline` | 已订阅但还没开始 / 和DSH断开 | 常亮 |
 
-另外，每次状态变化时，灯会额外放大回落几次作为提醒，次数和速度可以在[设置](#设置)里调。
+另外，每次状态变化时，灯会额外放大回落几次作为提醒，次数和速度可以在[设置](#设置)里调。会话进入阻塞或完成状态时，还可以播放系统提示音。
 
 ## 折叠
 
@@ -89,6 +89,8 @@ dsh plugin --profile desktop add /path/to/dsh-trafficlight
 | 极简模式 | 开/关（关） | 见[极简模式](#极简模式) |
 | 呼吸次数 | 1–6次（3次） | 状态变化时灯放大回落的次数 |
 | 呼吸速度 | 0.1–1秒（0.35秒） | 每次放大或回落的时长 |
+| 状态提示音 | 开/关（开） | 阻塞或完成时播放系统提示音 |
+| 提示音量 | 0–100%（60%） | 提示音的音量 |
 
 ## 工作原理
 
@@ -98,7 +100,7 @@ dsh plugin --profile desktop add /path/to/dsh-trafficlight
 
 | 入口 | 使用方 | 接口 |
 |---|---|---|
-| `127.0.0.1:18765`（可用环境变量`DSH_TL_PORT`修改） | 悬浮窗每0.7秒拉一次`/state` | `/state`、`/stream`（SSE）、`/subscriptions`、`/focus`、`/mode`、`/opacity`、`/minimal`、`/breath` |
+| `127.0.0.1:18765`（可用环境变量`DSH_TL_PORT`修改） | 悬浮窗每0.7秒拉一次`/state` | `/state`、`/stream`（SSE）、`/subscriptions`、`/focus`、`/mode`、`/opacity`、`/minimal`、`/breath`、`/sound` |
 | DSH网页服务下的`/api/dsh-tl/*` | 订阅按钮每2秒同步一次；侧栏面板每秒刷新并上报心跳 | 同上，另有`/dockbeat`（侧栏心跳）和`/events`（SSE） |
 
 端口被占用时，本机桥不会启动，只保留网页路由，悬浮窗会显示未连接。
@@ -163,7 +165,7 @@ bash scripts/trafficlight.sh
 
 | 插件版本 | 适用的DSH | 说明 |
 |---|---|---|
-| **0.4.0-fork.1**（当前） | DSH Desktop `0.2.2-rc.3`、dsh web `0.1.5-rc.1` | 需要`dsh-client-locale`和`dsh-client-ui-conversation`提供的插槽 |
+| **0.4.0-fork.8**（当前） | DSH Desktop `0.2.2-rc.3`、dsh web `0.1.5-rc.1` | 需要`dsh-client-locale`和`dsh-client-ui-conversation`提供的插槽；含归位、Liquid Glass、真实标题和状态提示音 |
 | 0.3.x | dsh `0.1.x` web profile | 没有归位和Liquid Glass |
 
 ## 已知限制
@@ -185,7 +187,7 @@ dsh-trafficlight/
 │   │   ├── status.ts             # 状态机：session/event → 四种灯态、摘要、标题
 │   │   ├── subscriptions.ts      # 订阅列表及持久化
 │   │   ├── overlay-launcher.ts   # 有订阅时自动拉起悬浮窗
-│   │   ├── settings.ts           # 透明度、极简模式、呼吸参数、呈现模式
+│   │   ├── settings.ts           # 透明度、极简模式、呼吸参数、提示音、呈现模式
 │   │   └── bridge.ts             # 本机桥（18765）和/api/dsh-tl/*
 │   └── client/index.tsx          # 订阅按钮、侧栏面板、设置页
 ├── lib/                          # 构建产物（随仓库提交）
